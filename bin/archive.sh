@@ -6,7 +6,7 @@ copydest=$1
 version=$(cat dist/version)
 
 cd dist/chrome;
-zipfile="aesr-chrome-$version.zip"
+zipfile="roledeck-chrome-$version.zip"
 if [ -e $zipfile ]; then
   \rm $zipfile
 fi
@@ -20,7 +20,7 @@ fi
 echo "----"
 
 cd ../firefox;
-zipfile="aesr-firefox-$version.zip"
+zipfile="roledeck-firefox-$version.zip"
 if [ -e $zipfile ]; then
   \rm $zipfile
 fi

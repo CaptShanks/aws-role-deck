@@ -1,7 +1,7 @@
 {
-  "name": "aws-extend-switch-roles",
-  "version": "6.1.0",
-  "description": "Extend your AWS IAM switching roles by Chrome extension",
+  "name": "roledeck",
+  "version": "0.1.0",
+  "description": "RoleDeck — a faster, safer AWS IAM role switcher (fork of AWS Extend Switch Roles)",
   "main": "index.js",
   "directories": {
     "test": "test"
