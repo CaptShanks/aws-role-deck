@@ -1,12 +1,20 @@
 {
-  "permissions": ["activeTab", "storage"],
+  "permissions": ["activeTab", "storage", "tabs", "cookies", "contextualIdentities", "alarms"],
   "browser_specific_settings": {
     "gecko": {
-      "id": "aws-extend-switch-roles@toshi.tilfin.com",
+      "id": "roledeck@fork.local",
       "strict_min_version": "109.0"
     }
   },
-  "optional_permissions": ["https://*.aesr.dev/*"],
+  "optional_permissions": ["https://*.aesr.dev/*", "https://*/*"],
+  "host_permissions": ["https://*.amazon.com/*", "https://*.amazonaws-us-gov.com/*", "https://*.amazonaws.cn/*"],
+  "icons": {
+    "48": "icons/roledeck-hat.svg",
+    "128": "icons/roledeck-hat.svg"
+  },
+  "action": {
+    "default_icon": "icons/roledeck-hat.svg"
+  },
   "background": {
     "scripts": ["js/background.js"]
   }

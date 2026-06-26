@@ -2,19 +2,50 @@ import { SessionMemory, SyncStorageRepository } from './lib/storage_repository.j
 import { setIcon } from './lib/set_icon.js'
 import { externalConfigReceived } from './handlers/external.js'
 import { updateProfilesTable } from './handlers/update_profiles.js'
+import { openProfileInContainer, setupContainerTabGuard } from './lib/container_tabs.js'
+import { trackSwitch, clearTracking, handleRenewAlarm } from './lib/session_renew.js'
+import { applyManagedConfig } from './lib/managed_config.js'
 
 const syncStorageRepo = new SyncStorageRepository(chrome || browser)
 const sessionMemory = new SessionMemory(chrome || browser)
 
+setupContainerTabGuard()
+
+chrome.alarms.onAlarm.addListener(alarm => {
+  handleRenewAlarm(alarm.name).catch(err => console.error(err));
+})
+
+chrome.tabs.onRemoved.addListener(tabId => {
+  clearTracking(tabId).catch(() => {});
+})
+
 async function initScript() {
   await sessionMemory.set({ switchCount: 0 });
 
+  // The donor "golden key" only drives a cosmetic icon now; all features are
+  // available to everyone.
   const { goldenKeyExpire } = await syncStorageRepo.get(['goldenKeyExpire']);
   if ((new Date().getTime() / 1000) < Number(goldenKeyExpire)) {
     await sessionMemory.set({ hasGoldenKey: 't' });
-    return setIcon('/icons/Icon_48x48_g.png');
-  } else {
-    await syncStorageRepo.set({ autoTabGrouping: false, signinEndpointInHere: false });
+    setIcon('/icons/Icon_48x48_g.png');
+  }
+}
+
+// Re-fetch the team-managed config on startup if enabled and the host
+// permission is still granted.
+async function refreshManagedConfig() {
+  const { managedConfigUrl, managedConfigAuto } = await syncStorageRepo.get(['managedConfigUrl', 'managedConfigAuto']);
+  if (!managedConfigAuto || !managedConfigUrl) return;
+  try {
+    const origin = new URL(managedConfigUrl).origin + '/*';
+    const granted = await chrome.permissions.contains({ origins: [origin] });
+    if (!granted) return;
+    const resp = await fetch(managedConfigUrl, { cache: 'no-store' });
+    if (!resp.ok) return;
+    await applyManagedConfig(await resp.text());
+    console.info('RoleDeck: refreshed managed config from', managedConfigUrl);
+  } catch (err) {
+    console.error(`RoleDeck managed config refresh failed: ${err}`);
   }
 }
 
@@ -23,6 +54,7 @@ chrome.runtime.onStartup.addListener(function () {
     console.error(err);
   });
 
+  refreshManagedConfig();
   initScript();
 })
 
@@ -65,7 +97,18 @@ function createTabGroupKey(title) {
 let listeningTabGroupsRemove = false;
 
 chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
-  if (message.action === 'listenTabGroupsRemove' && !listeningTabGroupsRemove) {
+  if (message.action === 'openInContainer') {
+    // Firefox only: the returned promise resolution is delivered as the response
+    try {
+      await openProfileInContainer(message.data);
+      return {};
+    } catch (err) {
+      return { error: err.message };
+    }
+  }
+  if (message.action === 'trackSwitch') {
+    await trackSwitch(message.tabId ?? sender.tab?.id, message.data);
+  } else if (message.action === 'listenTabGroupsRemove' && !listeningTabGroupsRemove) {
     chrome.tabGroups.onRemoved.addListener(async function (group) {
       const key = createTabGroupKey(group.title);
       const result = await sessionMemory.get([key]);

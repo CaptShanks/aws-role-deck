@@ -39,7 +39,7 @@ describe('createRoleListItem', () => {
       expect(a.dataset.redirecturi).to.eq('https%3A%2F%2Fconsole.aws.amazonaws.com%2F');
       expect(a.dataset.search).to.eq('profilea 222233334444');
       expect(a.innerHTML).to.eq(`<span class="headSquare" style="background-color: rgb(170, 170, 170);"> \
-</span>profileA<span class="suffixAccountId">222233334444</span>`);
+</span><span class="rl-name">profileA</span><span class="suffixAccountId">222233334444</span>`);
 
       a.click();
       expect(handlerData).to.deep.eq({
@@ -75,7 +75,7 @@ describe('createRoleListItem', () => {
       expect(a.dataset.redirecturi).to.eq('https%3A%2F%2Fconsole.aws.amazonaws.com%2F%3Fregion%3Dus-east-1');
       expect(a.dataset.search).to.eq('profile-b 000011115555');
       expect(a.innerHTML).to.eq(`<span class="headSquare" style="background-color: rgb(255, 170, 153);"> \
-</span>profile-b<span class="suffixAccountId">000011115555</span>`);
+</span><span class="rl-name">profile-b</span><span class="suffixAccountId">000011115555</span>`);
     });
   });
 
@@ -92,7 +92,7 @@ describe('createRoleListItem', () => {
 
       const a = li.querySelector('a')
       expect(a.innerHTML).to.eq(`<span class="headSquare" style="\
-background-image: url(&quot;https://www.exapmle.com/icon.png&quot;);"> </span>prf<span class="suffixAccountId">333344441111</span>`);
+background-image: url(&quot;https://www.exapmle.com/icon.png&quot;);"> </span><span class="rl-name">prf</span><span class="suffixAccountId">333344441111</span>`);
     });
   });
 
@@ -110,7 +110,7 @@ background-image: url(&quot;https://www.exapmle.com/icon.png&quot;);"> </span>pr
 
       const a = li.querySelector('a')
       expect(a.innerHTML).to.eq(`<span class="headSquare" style="background-color: rgb(255, 170, 34); \
-background-image: url(&quot;https://www.exapmle.com/icon.png&quot;);"> </span>prf<span class="suffixAccountId">333344441111</span>`);
+background-image: url(&quot;https://www.exapmle.com/icon.png&quot;);"> </span><span class="rl-name">prf</span><span class="suffixAccountId">333344441111</span>`);
     });
   });
 
@@ -127,6 +127,20 @@ background-image: url(&quot;https://www.exapmle.com/icon.png&quot;);"> </span>pr
 
       const a = li.querySelector('a')
       expect(a.dataset.redirecturi).to.eq('https%3A%2F%2Fconsole.aws.amazonaws.com%2F%3Fregion%3Dus-west-2');
+    });
+  });
+
+  describe('profile has start_url (deep link)', () => {
+    it('uses the start_url as the redirect target', () => {
+      const item = {
+        name: 'deep',
+        aws_account_id: '123412341234',
+        role_name: 'r',
+        start_url: 'https://us-west-2.console.aws.amazon.com/cloudwatch/home?region=us-west-2',
+      }
+      const li = createRoleListItem(window.document, item, 'https://console.aws.amazon.com/', '', {}, () => {});
+      const a = li.querySelector('a');
+      expect(a.dataset.redirecturi).to.eq(encodeURIComponent('https://us-west-2.console.aws.amazon.com/cloudwatch/home?region=us-west-2'));
     });
   });
 
@@ -149,7 +163,7 @@ background-image: url(&quot;https://www.exapmle.com/icon.png&quot;);"> </span>pr
       expect(a.dataset.displayname).to.eq('ProfileC');
       expect(a.dataset.redirecturi).to.eq('https%3A%2F%2Fconsole.aws.amazonaws.com%2F%3Fregion%3Dus-east-1');
       expect(a.dataset.search).to.eq('profilec 000011117777');
-      expect(a.innerHTML).to.eq(`<span class="headSquare" style="background-color: rgb(170, 170, 170);"> </span>ProfileC`);
+      expect(a.innerHTML).to.eq(`<span class="headSquare" style="background-color: rgb(170, 170, 170);"> </span><span class="rl-name">ProfileC</span>`);
     });
   });
 });

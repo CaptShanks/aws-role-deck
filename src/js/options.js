@@ -1,18 +1,22 @@
 import { ConfigParser } from 'aesr-config';
+import { buildProfileIni } from './lib/build_profile_ini.js';
 import { nowEpochSeconds } from './lib/util.js';
 import { loadConfigIni, saveConfigIni } from './lib/config_ini.js';
 import { ColorPicker } from './lib/color_picker.js';
-import { SessionMemory, StorageProvider } from './lib/storage_repository.js';
+import { StorageProvider } from './lib/storage_repository.js';
 import { writeProfileSetToTable } from "./lib/profile_db.js";
 import { remoteConnect, getRemoteConnectInfo, deleteRemoteConnectInfo } from './handlers/remote_connect.js';
 import { reloadConfig } from './lib/reload-config.js';
+import { lintConfig } from './lib/lint_config.js';
+import { activityToCsv } from './lib/activity_log.js';
+import { applyManagedConfig } from './lib/managed_config.js';
+import { discoverProfiles } from './lib/discover_profiles.js';
 
 function elById(id) {
   return document.getElementById(id);
 }
 
 const brw = chrome || browser;
-const sessionMemory = new SessionMemory(brw);
 
 window.onload = function() {
   const syncStorageRepo = StorageProvider.getSyncRepository();
@@ -92,62 +96,268 @@ window.onload = function() {
     }
   }
 
-  const booleanSettings = ['hidesAccountId', 'showOnlyMatchingRoles', 'autoAssumeLastRole'];
+  // Visual profile editor: build an INI block from the form and append it.
+  elById('addProfileButton').onclick = function() {
+    try {
+      const ini = buildProfileIni({
+        name: elById('edName').value,
+        label: elById('edLabel').value,
+        accountId: elById('edAccountId').value,
+        roleName: elById('edRoleName').value,
+        roleArn: elById('edRoleArn').value,
+        region: elById('edRegion').value,
+        color: elById('edColor').value,
+        env: elById('edEnv').value,
+        sourceProfile: elById('edSourceProfile').value,
+        container: elById('edContainer').value,
+        containerColor: elById('edContainerColor').value,
+        confirm: elById('edConfirm').checked,
+      });
+      const cur = textArea.value.replace(/\s*$/, '');
+      textArea.value = cur ? `${cur}\n\n${ini}\n` : `${ini}\n`;
+      textArea.scrollTop = textArea.scrollHeight;
+
+      ['edName', 'edLabel', 'edAccountId', 'edRoleName', 'edRoleArn', 'edRegion', 'edColor', 'edSourceProfile', 'edContainer'].forEach(id => { elById(id).value = ''; });
+      elById('edEnv').value = 'none';
+      elById('edContainerColor').value = '';
+      elById('edConfirm').checked = false;
+
+      updateMessage('editorMsg', 'Added — review the configuration above and click Save.');
+    } catch (e) {
+      updateMessage('editorMsg', e.message, 'warn');
+    }
+  }
+
+  // Import / export the raw configuration as a file.
+  elById('exportConfigButton').onclick = function() {
+    const blob = new Blob([textArea.value], { type: 'text/plain' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'roledeck-config.ini';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  }
+  elById('importConfigButton').onclick = function() {
+    elById('importFileInput').click();
+  }
+  // Upload + discover: parse a dropped/chosen config file, show what was found,
+  // and let the user load it into the editor.
+  function handleConfigFile(file) {
+    const reader = new FileReader();
+    reader.onload = () => showDiscovery(String(reader.result || ''));
+    reader.readAsText(file);
+  }
+
+  function afterDiscoverLoad() {
+    elById('lintButton').click(); // surface any issues right away
+    updateMessage('msgSpan', 'Loaded — review and click Save configuration.');
+    textArea.scrollTop = 0;
+  }
+
+  function showDiscovery(text) {
+    const result = discoverProfiles(text);
+    const panel = elById('discoverSummary');
+    panel.style.display = 'block';
+    panel.innerHTML = '';
+
+    if (result.profiles.length === 0) {
+      panel.classList.add('warn-panel');
+      panel.textContent = 'No switchable roles or profiles were found in that file.';
+      return;
+    }
+    panel.classList.remove('warn-panel');
+
+    const head = document.createElement('div');
+    head.className = 'discover-head';
+    const pCount = result.profiles.length;
+    const aCount = result.accountCount;
+    head.innerHTML = `<b>Discovered ${pCount} profile${pCount === 1 ? '' : 's'}</b> across ${aCount} account${aCount === 1 ? '' : 's'}`
+      + (result.skipped.length ? ` &middot; skipped ${result.skipped.length}` : '');
+    panel.appendChild(head);
+
+    if (result.skipped.length) {
+      const details = document.createElement('details');
+      const summary = document.createElement('summary');
+      summary.textContent = `Skipped ${result.skipped.length} entr${result.skipped.length === 1 ? 'y' : 'ies'} (credentials, SSO, incomplete)`;
+      details.appendChild(summary);
+      const ul = document.createElement('ul');
+      ul.className = 'discover-skipped';
+      result.skipped.forEach(s => {
+        const li = document.createElement('li');
+        li.textContent = `${s.name} — ${s.reason}`;
+        ul.appendChild(li);
+      });
+      details.appendChild(ul);
+      panel.appendChild(details);
+    }
+
+    const actions = document.createElement('div');
+    actions.className = 'save-row';
+    const loadBtn = document.createElement('button');
+    loadBtn.className = 'btn btn-primary';
+    loadBtn.textContent = 'Load into editor';
+    loadBtn.onclick = () => { textArea.value = result.text; afterDiscoverLoad(); };
+    const appendBtn = document.createElement('button');
+    appendBtn.className = 'btn btn-sm';
+    appendBtn.textContent = 'Append to editor';
+    appendBtn.onclick = () => {
+      const cur = textArea.value.replace(/\s*$/, '');
+      textArea.value = cur ? `${cur}\n\n${result.text}` : result.text;
+      afterDiscoverLoad();
+    };
+    actions.appendChild(loadBtn);
+    actions.appendChild(appendBtn);
+    panel.appendChild(actions);
+  }
+
+  elById('importFileInput').onchange = function() {
+    const file = this.files && this.files[0];
+    if (file) handleConfigFile(file);
+    this.value = '';
+  }
+  elById('dropzoneBrowse').onclick = function(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    elById('importFileInput').click();
+  }
+  const dropzone = elById('configDropzone');
+  dropzone.onclick = function() { elById('importFileInput').click(); }
+  dropzone.addEventListener('dragover', function(e) { e.preventDefault(); dropzone.classList.add('dragover'); });
+  dropzone.addEventListener('dragleave', function() { dropzone.classList.remove('dragover'); });
+  dropzone.addEventListener('drop', function(e) {
+    e.preventDefault();
+    dropzone.classList.remove('dragover');
+    const file = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+    if (file) handleConfigFile(file);
+  });
+
+  // Config linter
+  elById('lintButton').onclick = function() {
+    const warnings = lintConfig(textArea.value);
+    const panel = elById('lintResults');
+    panel.innerHTML = '';
+    panel.style.display = 'block';
+    if (warnings.length === 0) {
+      const ok = document.createElement('div');
+      ok.className = 'lint-ok';
+      ok.textContent = '✓ No problems found.';
+      panel.appendChild(ok);
+      return;
+    }
+    warnings.forEach(w => {
+      const row = document.createElement('div');
+      row.className = `lint-item lint-${w.level}`;
+      row.textContent = (w.line ? `Line ${w.line}: ` : '') + w.message;
+      if (w.line) {
+        row.style.cursor = 'pointer';
+        row.onclick = () => focusConfigTextArea(w.line);
+      }
+      panel.appendChild(row);
+    });
+  }
+
+  // Activity log
+  elById('exportActivityButton').onclick = function() {
+    StorageProvider.getLocalRepository().get(['rdActivityLog']).then(({ rdActivityLog }) => {
+      downloadText(activityToCsv(rdActivityLog || []), 'roledeck-activity.csv', 'text/csv');
+    });
+  }
+  elById('clearActivityButton').onclick = function() {
+    StorageProvider.getLocalRepository().set({ rdActivityLog: [] }).then(renderActivityLog);
+  }
+  renderActivityLog();
+
+  // Managed config
+  elById('managedUrl').onchange = function() {
+    syncStorageRepo.set({ managedConfigUrl: this.value.trim() });
+  }
+  elById('managedAuto').onchange = function() {
+    syncStorageRepo.set({ managedConfigAuto: this.checked });
+  }
+  elById('fetchManagedButton').onclick = async function() {
+    const url = elById('managedUrl').value.trim();
+    try {
+      if (!/^https:\/\//i.test(url)) throw new Error('Enter an https:// URL.');
+      const origin = new URL(url).origin + '/*';
+      const granted = await new Promise(res => brw.permissions.request({ origins: [origin] }, res));
+      if (!granted) throw new Error('Permission to access that URL was denied.');
+      const resp = await fetch(url, { cache: 'no-store' });
+      if (!resp.ok) throw new Error(`Fetch failed (HTTP ${resp.status}).`);
+      const text = await resp.text();
+      await applyManagedConfig(text);
+      textArea.value = text;
+      elById('configStorageLocalRadioButton').checked = true;
+      updateMessage('managedMsg', 'Fetched and applied (stored locally).');
+    } catch (e) {
+      updateMessage('managedMsg', e.message, 'warn');
+    }
+  }
+  syncStorageRepo.get(['managedConfigUrl', 'managedConfigAuto']).then(d => {
+    elById('managedUrl').value = d.managedConfigUrl || '';
+    elById('managedAuto').checked = Boolean(d.managedConfigAuto);
+  });
+
+  elById('prodIdleLockMin').onchange = function() {
+    syncStorageRepo.set({ prodIdleLockMin: Number(this.value) });
+  }
+
+  const booleanSettings = ['hidesAccountId', 'showOnlyMatchingRoles', 'autoAssumeLastRole', 'useFirefoxContainers', 'autoSessionRenew', 'prodBanner'];
   for (let key of booleanSettings) {
     elById(`${key}CheckBox`).onchange = function() {
       syncStorageRepo.set({ [key]: this.checked });
     }
   }
   const autoTabGroupingCheckBox = elById('autoTabGroupingCheckBox');
+  const signinEndpointInHereCheckBox = elById('signinEndpointInHereCheckBox');
   if (navigator.userAgent.includes('Firefox')) {
+    // Firefox has no tab groups API.
     autoTabGroupingCheckBox.disabled = true;
     autoTabGroupingCheckBox.parentElement.style.textDecoration = 'line-through';
     autoTabGroupingCheckBox.parentElement.title = 'This browser does not support tab groups.';
-  }
-  const signinEndpointInHereCheckBox = elById('signinEndpointInHereCheckBox');
-  sessionMemory.get(['hasGoldenKey'])
-  .then(({ hasGoldenKey }) => {
-    if (hasGoldenKey) {
-      autoTabGroupingCheckBox.onchange = function(evt) {
-        if (this.checked) {
-          brw.permissions.request({
-            permissions: ['tabGroups'],
-            origins: ["https://*.console.aws.amazon.com/*"],
-          }, (granted) => {
-            if (granted) {
-              syncStorageRepo.set({ autoTabGrouping: 'AddTabGroup,LogoutOnRemove' });
-            } else {
-              this.checked = false;
-            }
-          });
-        } else {
-          syncStorageRepo.set({ autoTabGrouping: false });
-        }
-      }
-      signinEndpointInHereCheckBox.onchange = function() {
-        syncStorageRepo.set({ signinEndpointInHere: this.checked });
-      }
+  } else {
+    // Chrome/Edge: container tabs are a Firefox-only feature.
+    const useFirefoxContainersCheckBox = elById('useFirefoxContainersCheckBox');
+    useFirefoxContainersCheckBox.disabled = true;
+    useFirefoxContainersCheckBox.parentElement.style.textDecoration = 'line-through';
+    useFirefoxContainersCheckBox.parentElement.title = 'This browser does not support container tabs.';
 
-      getRemoteConnectInfo().then(rci => {
-        if (rci && rci.subdomain && rci.clientId) {
-          elById('configHubDomain').value = rci.subdomain;
-          elById('configHubClientId').value = rci.clientId;
-          if (rci.refreshToken) {
-            updateRemoteFieldsState('connected');
+    autoTabGroupingCheckBox.onchange = function() {
+      if (this.checked) {
+        brw.permissions.request({
+          permissions: ['tabGroups'],
+          origins: ["https://*.console.aws.amazon.com/*"],
+        }, (granted) => {
+          if (granted) {
+            syncStorageRepo.set({ autoTabGrouping: 'AddTabGroup,LogoutOnRemove' });
           } else {
-            updateRemoteFieldsState('disconnected');
-            updateMessage('remoteMsgSpan', "Please reconnect because your credentials have expired.", 'warn');
+            this.checked = false;
           }
-        }
-      });
-    } else {
-      autoTabGroupingCheckBox.disabled = true;
-      signinEndpointInHereCheckBox.disabled = true;
-      const schb = elById('switchConfigHubButton')
-      schb.disabled = true;
-      schb.title = 'Supporters only';
+        });
+      } else {
+        syncStorageRepo.set({ autoTabGrouping: false });
+      }
+    }
+  }
+
+  signinEndpointInHereCheckBox.onchange = function() {
+    syncStorageRepo.set({ signinEndpointInHere: this.checked });
+  }
+
+  getRemoteConnectInfo().then(rci => {
+    if (rci && rci.subdomain && rci.clientId) {
+      elById('configHubDomain').value = rci.subdomain;
+      elById('configHubClientId').value = rci.clientId;
+      if (rci.refreshToken) {
+        updateRemoteFieldsState('connected');
+      } else {
+        updateRemoteFieldsState('disconnected');
+        updateMessage('remoteMsgSpan', "Please reconnect because your credentials have expired.", 'warn');
+      }
     }
   });
+
   booleanSettings.push('autoTabGrouping');
   booleanSettings.push('signinEndpointInHere');
 
@@ -198,11 +408,16 @@ window.onload = function() {
     }
   }
 
-  syncStorageRepo.get(['configSenderId', 'configStorageArea', 'visualMode'].concat(booleanSettings))
+  syncStorageRepo.get(['configSenderId', 'configStorageArea', 'visualMode', 'prodIdleLockMin'].concat(booleanSettings))
   .then(data => {
     elById('configSenderIdText').value = data.configSenderId || '';
     for (let key of booleanSettings) {
       elById(`${key}CheckBox`).checked = Boolean(data[key]);
+    }
+    elById('prodBannerCheckBox').checked = data.prodBanner !== false; // default on
+    elById('prodIdleLockMin').value = String(data.prodIdleLockMin || 0);
+    if (navigator.userAgent.includes('Firefox')) {
+      elById('useFirefoxContainersCheckBox').checked = data.useFirefoxContainers !== false; // default on (Firefox)
     }
 
     configStorageArea = data.configStorageArea || 'sync'
@@ -242,6 +457,45 @@ async function saveConfiguration(text, storageArea) {
 
   await writeProfileSetToTable(profileSet);
   await localRepo.set({ profilesTableUpdated: now });
+}
+
+function escapeHtml(s) {
+  return String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+}
+
+function downloadText(text, filename, type = 'text/plain') {
+  const blob = new Blob([text], { type });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+
+function renderActivityLog() {
+  StorageProvider.getLocalRepository().get(['rdActivityLog']).then(({ rdActivityLog }) => {
+    const log = rdActivityLog || [];
+    const body = elById('activityBody');
+    const wrap = elById('activityTableWrap');
+    const empty = elById('activityEmpty');
+    body.innerHTML = '';
+    if (log.length === 0) {
+      wrap.style.display = 'none';
+      empty.style.display = 'block';
+      return;
+    }
+    empty.style.display = 'none';
+    wrap.style.display = 'block';
+    log.slice(0, 200).forEach(e => {
+      const tr = document.createElement('tr');
+      const when = e.ts ? new Date(e.ts).toLocaleString() : '';
+      const env = e.env ? `<span class="log-env env-${escapeHtml(e.env)}">${escapeHtml(e.env)}</span>` : '';
+      tr.innerHTML = `<td>${escapeHtml(when)}</td><td>${escapeHtml(e.profile)}</td><td>${escapeHtml(e.account)}</td><td>${env}</td>`;
+      body.appendChild(tr);
+    });
+  });
 }
 
 function updateMessage(elId, msg, cls = 'success') {

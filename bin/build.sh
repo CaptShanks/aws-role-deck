@@ -27,6 +27,7 @@ browsers=("chrome" "firefox")
 for brw in ${browsers[@]}
 do
   \cp src/js/content.js dist/$brw/js/
+  \cp src/js/switchrole_auto.js dist/$brw/js/
   \cp -r src/js/war dist/$brw/js/
   \cp -r src/*.html dist/$brw/
   \cp -r icons  dist/$brw/

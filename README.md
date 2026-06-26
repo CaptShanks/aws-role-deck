@@ -1,4 +1,60 @@
-# AWS Extend Switch Roles
+# RoleDeck
+
+**RoleDeck** is a faster, safer AWS IAM role switcher for Chrome, Edge, and Firefox — a heavily extended fork of [AWS Extend Switch Roles](https://github.com/tilfinltd/aws-extend-switch-roles). On top of the original aws-config-style role list it adds:
+
+- 🎨 **Color-coded Firefox containers** — open each profile in its own isolated container tab; child/tree tabs stay in the same container.
+- 🛡️ **Production guardrails** — profiles in production (by `env` or name) ask for confirmation before you switch, with `PROD`/`STG`/`DEV` badges in the list.
+- ⭐ **Favorites & recents** — star the roles you use most; recently used roles float to the top.
+- 🔎 **Command-palette popup** — a redesigned popup with fuzzy search and full keyboard control (↑/↓, Enter, Esc).
+- ⏱️ **Session auto-renew** — silently re-assume the role before the 1-hour switch-role limit so you stay signed in.
+- 📝 **Visual profile editor & config upload** — add profiles from a form, or **drag-and-drop your `~/.aws/config`** to auto-discover switchable roles (static credentials, `[sso-session]` blocks, and incomplete entries are filtered out, with a summary of what was kept and skipped). Import/export the whole config as a file too.
+- 🚨 **In-console production banner** — a persistent red border + ribbon whenever you're in a production account, with an optional idle auto-lock.
+- 📜 **Local activity log** — a private, exportable (CSV) history of your role switches; never leaves your browser.
+- ⌨️ **Quick-switch & deep links** — `Alt`+`1–9` to jump straight to a role, a `start_url` to land on a specific console page, and one-click "open all favorites" container workspaces.
+- 🧹 **Config linter & managed config** — validate your config inline (dangling references, duplicates, bad ARNs), or fetch a read-only team config from a URL.
+
+All settings are unlocked for everyone (no supporter gate). RoleDeck still reads the same `~/.aws/config`-style configuration as the original.
+
+## Firefox container tabs (fork feature)
+
+- Selecting a profile opens it in a **new container tab**; the container is created automatically and named after the profile (or a custom name).
+- The container **color is configurable per account** with `container_color` (`blue`, `turquoise`, `green`, `yellow`, `orange`, `red`, `pink`, `purple`, `toolbar`). If omitted, the nearest container color is derived from the profile's `color` value. An icon can be set with `container_icon`.
+- **Tabs opened from a container tab — including tree-style child tabs — stay in the same container.** Firefox inherits the container for tabs opened from links natively, and the add-on additionally moves stray child tabs (e.g. created by other extensions in the default container) back into the opener's container.
+- Enable it per profile with `container = true`, or for all profiles at once with the *"Open each profile in its own container tab"* setting on the options page (profiles can opt out with `container = false`). Setting `container = <name>` lets several profiles share one container.
+- The first switch in a fresh container asks you to sign in to AWS within that container (containers have isolated cookies); after that, each container keeps its own session.
+- Chrome/Edge behavior is unchanged (containers are a Firefox-only feature).
+
+```ini
+[profile production-admin]
+role_arn = arn:aws:iam::123456789012:role/Admin
+color = ff3333
+container = true
+container_color = red
+
+[profile staging-admin]
+role_arn = arn:aws:iam::210987654321:role/Admin
+container = true
+container_color = orange
+container_icon = circle
+```
+
+To install: run `npm install && npm run build`, then load `dist/firefox` as a temporary add-on via `about:debugging`, or zip it (`npm run archive`) and install the artifact.
+
+## Switch-role session auto-renew (fork feature)
+
+An AWS Management Console *switch-role* session is hard-capped at **1 hour** by AWS — it cannot be extended by activity or keep-alive pings, and raising the IAM role's max session duration does not change the console limit. The only way to keep working is to re-assume the role.
+
+Enable **"Automatically renew a switched-role session before it expires"** on the options page and the add-on will:
+
+- record when you switched into a role and set an alarm ~5 minutes before the 1-hour limit;
+- automatically re-assume the role when the alarm fires, **silently reloading the tab** to the page you're on so the session keeps rolling over hour after hour;
+- clean up automatically when the tab is closed.
+
+Caveats: because renewal reloads the tab, **unsaved input on the console page can be lost**. Renewal only works while your underlying base login (IAM user / SSO / federated) is still valid, and it is **not** applied to multi-session ("Prism") tabs. Works on both Chrome and Firefox.
+
+---
+
+Original README follows.
 
 [![Chrome Web Store](https://img.shields.io/chrome-web-store/v/jpmkfafbacpgapdghgdpembnojdlgkdl.svg)](https://chromewebstore.google.com/detail/aws-extend-switch-roles/jpmkfafbacpgapdghgdpembnojdlgkdl?utm_source=github)
 [![Firefox Add-on](https://img.shields.io/amo/v/aws-extend-switch-roles3.svg)](https://addons.mozilla.org/ja/firefox/addon/aws-extend-switch-roles3/)
@@ -11,7 +67,7 @@ This extension shows a menu of switchable roles that you can configure manually.
 
 - Supports the Sync feature on all sorts of browsers
 - Not support switching between AWS accounts you sign into with AWS SSO or SAML solution providers directly
-- Experimental support for **multi-session** on the AWS Management Console
+- Support for **multi-session** on the AWS Management Console
 
 ## Large Supporters
 
@@ -154,9 +210,9 @@ The 'Show only matching roles' setting is for use with more sophisticated accoun
 
 - **Hide account id** hides the account_id for each profile.
 - **Show only matching roles** filters to only show profiles with roles that match your role in your master account.
-- **Automatic tab grouping for multi-session (Experimental, Supporters only)** automatically organizes tabs from the same AWS Management Console multi-session into tab groups. The tab group name will be the corresponding profile name. When a tab group is removed, the corresponding session will be automatically signed out.
-- **Sign-in endpoint in current region (Experimental, Supporters only)** instead of *signin.aws.amazon.com* when you browse a non-global page in AWS Management Console. For those working geographically far from Virginia, the switch role may be a little faster.
-- ~~**Automatically assume last assumed role (Experimental)** automatically assumes last assumed role on the next sign-in if did not back to the base account and signed out.~~ **temporarily disabled**
+- **Automatic tab grouping for multi-session (Chrome & Edge)** automatically organizes tabs from the same AWS Management Console multi-session into tab groups. The tab group name will be the corresponding profile name. When a tab group is removed, the corresponding session will be automatically signed out.
+- **Sign-in endpoint in current region** instead of *signin.aws.amazon.com* when you browse a non-global page in AWS Management Console. For those working geographically far from Virginia, the switch role may be a little faster.
+- ~~**Automatically assume last assumed role** automatically assumes last assumed role on the next sign-in if did not back to the base account and signed out.~~ **temporarily disabled**
 - **Configuration storage** specifies which storage to save to. 'Sync' can automatically share it between browsers with your account but cannot store many profiles. 'Local' is the exact opposite of 'Sync.'
 - **Visual mode** specifies whether light mode or dark mode is applied to the UI appearance.
 
