@@ -1,0 +1,42 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - name: Build + archive
+        run: npm run archive
+      - name: Sign Firefox add-on (unlisted)
+        env:
+          WEB_EXT_API_KEY: ${{ secrets.AMO_JWT_ISSUER }}
+          WEB_EXT_API_SECRET: ${{ secrets.AMO_JWT_SECRET }}
+        run: npx --yes web-ext sign --source-dir dist/firefox --channel=unlisted --artifacts-dir web-ext-artifacts
+      - name: Assemble release assets
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          cp "$(ls web-ext-artifacts/*.xpi | head -1)" "roledeck-${VERSION}.xpi"
+          bin/make-updates-json.sh "$VERSION"
+      - name: Publish to GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          ASSETS=( "roledeck-${VERSION}.xpi" updates.json
+                   "dist/chrome/roledeck-chrome-$(cat dist/version).zip"
+                   "dist/firefox/roledeck-firefox-$(cat dist/version).zip" )
+          gh release create "$GITHUB_REF_NAME" --title "RoleDeck $GITHUB_REF_NAME" --generate-notes "${ASSETS[@]}" \
+            || gh release upload "$GITHUB_REF_NAME" --clobber "${ASSETS[@]}"
