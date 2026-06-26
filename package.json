@@ -11,6 +11,7 @@
     "archive:dev": "npm run build:dev; ./bin/archive.sh",
     "build": "./bin/build.sh",
     "build:dev": "./bin/build.sh --dev",
+    "sign:firefox": "npm run build && npx --yes web-ext sign --source-dir dist/firefox --channel=unlisted --artifacts-dir web-ext-artifacts",
     "pretest": "./bin/build_test.sh",
     "test": "mocha --timeout 10000 src/js/**/*.test.js",
     "test_emulator": "playwright test test/emulator/*.spec.js",
