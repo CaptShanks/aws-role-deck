@@ -2,8 +2,9 @@
   "permissions": ["activeTab", "storage", "tabs", "cookies", "contextualIdentities", "alarms"],
   "browser_specific_settings": {
     "gecko": {
-      "id": "roledeck@fork.local",
-      "strict_min_version": "109.0"
+      "id": "roledeck@captshanks.github.io",
+      "strict_min_version": "109.0",
+      "update_url": "https://github.com/CaptShanks/aws-role-deck/releases/latest/download/updates.json"
     }
   },
   "optional_permissions": ["https://*.aesr.dev/*", "https://*/*"],
