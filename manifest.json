@@ -1,5 +1,5 @@
 {
-  "version": "0.1.0",
+  "version": "0.2.0",
   "name": "RoleDeck — AWS role switcher",
   "description": "RoleDeck: a faster, safer way to switch AWS IAM roles — color-coded Firefox containers, production guardrails, favorites & recents, session auto-renew, and a command-palette popup. Configure it like an aws config file.",
   "short_name": "RoleDeck",

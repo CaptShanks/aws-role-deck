@@ -1,6 +1,6 @@
 {
   "name": "roledeck",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "RoleDeck — a faster, safer AWS IAM role switcher (fork of AWS Extend Switch Roles)",
   "main": "index.js",
   "directories": {

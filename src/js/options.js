@@ -415,6 +415,7 @@ window.onload = function() {
       elById(`${key}CheckBox`).checked = Boolean(data[key]);
     }
     elById('prodBannerCheckBox').checked = data.prodBanner !== false; // default on
+    elById('autoSessionRenewCheckBox').checked = data.autoSessionRenew !== false; // default on
     elById('prodIdleLockMin').value = String(data.prodIdleLockMin || 0);
     if (navigator.userAgent.includes('Firefox')) {
       elById('useFirefoxContainersCheckBox').checked = data.useFirefoxContainers !== false; // default on (Firefox)

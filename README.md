@@ -10,7 +10,7 @@
 - 📝 **Visual profile editor & config upload** — add profiles from a form, or **drag-and-drop your `~/.aws/config`** to auto-discover switchable roles (static credentials, `[sso-session]` blocks, and incomplete entries are filtered out, with a summary of what was kept and skipped). Import/export the whole config as a file too.
 - 🚨 **In-console production banner** — a persistent red border + ribbon whenever you're in a production account, with an optional idle auto-lock.
 - 📜 **Local activity log** — a private, exportable (CSV) history of your role switches; never leaves your browser.
-- ⌨️ **Quick-switch & deep links** — `Alt`+`1–9` to jump straight to a role, a `start_url` to land on a specific console page, and one-click "open all favorites" container workspaces.
+- 🔗 **Deep links & workspaces** — a `start_url` to land on a specific console page, and one-click "open all favorites" container workspaces.
 - 🧹 **Config linter & managed config** — validate your config inline (dangling references, duplicates, bad ARNs), or fetch a read-only team config from a URL.
 
 All settings are unlocked for everyone (no supporter gate). RoleDeck still reads the same `~/.aws/config`-style configuration as the original.

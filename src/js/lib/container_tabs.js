@@ -174,8 +174,11 @@ export async function openProfileInContainer(data) {
   // signed-in (a fresh container has no cookies and would show a sign-in page).
   await bootstrapContainerSession(identity.cookieStoreId, data.signinEndpoint);
   const url = buildSwitchUrl(data);
-  await browser.tabs.create({ url, cookieStoreId: identity.cookieStoreId });
+  const tab = await browser.tabs.create({ url, cookieStoreId: identity.cookieStoreId });
   await registerManagedStore(identity.cookieStoreId);
+  if (data.autoRenew && tab && tab.id != null) {
+    await trackContainerSwitch(tab.id, data);
+  }
 }
 
 function awsCookieDomains(signinEndpoint) {
@@ -237,13 +240,100 @@ async function clearCookies(store, domain) {
 // first so a stale/partial session can't keep it logged out. (Trimming to
 // "just the login cookies" is unreliable — AWS's session cookies are
 // intertwined — so we copy them all; the multi-session picker is auto-confirmed.)
-async function bootstrapContainerSession(targetStoreId, signinEndpoint) {
+async function bootstrapContainerSession(targetStoreId, signinEndpoint, clear = true) {
   if (!targetStoreId || targetStoreId === DEFAULT_STORE_ID) return;
   if (!browser.cookies) return;
   for (const domain of awsCookieDomains(signinEndpoint)) {
-    await clearCookies(targetStoreId, domain);
+    if (clear) await clearCookies(targetStoreId, domain);
     await copyCookies(DEFAULT_STORE_ID, targetStoreId, domain);
   }
+}
+
+// ---- Container session auto-renew ----
+// Switch-role sessions expire after 1 hour. For container tabs we re-assume the
+// role ~5 min before that by refreshing the base login and reloading through
+// the switch URL (auto-confirmed by the switchrole content script).
+const CRENEW_PREFIX = 'aesrContainerRenew:';
+const CRENEW_STORE_KEY = 'rdContainerRenew';
+const CRENEW_AT_MIN = 55;
+
+function crenewKey(tabId) { return `${CRENEW_PREFIX}${tabId}`; }
+
+export function parseContainerRenewTab(alarmName) {
+  if (typeof alarmName !== 'string' || !alarmName.startsWith(CRENEW_PREFIX)) return null;
+  const id = Number(alarmName.slice(CRENEW_PREFIX.length));
+  return Number.isInteger(id) ? id : null;
+}
+
+export async function trackContainerSwitch(tabId, data) {
+  if (!tabId || !browser.alarms) return;
+  const store = await browser.storage.local.get(CRENEW_STORE_KEY);
+  const map = store[CRENEW_STORE_KEY] || {};
+  map[String(tabId)] = data;
+  await browser.storage.local.set({ [CRENEW_STORE_KEY]: map });
+  try { await browser.alarms.clear(crenewKey(tabId)); } catch (e) {}
+  browser.alarms.create(crenewKey(tabId), { when: Date.now() + CRENEW_AT_MIN * 60 * 1000 });
+}
+
+export async function clearContainerRenew(tabId) {
+  const store = await browser.storage.local.get(CRENEW_STORE_KEY);
+  const map = store[CRENEW_STORE_KEY] || {};
+  if (map[String(tabId)] !== undefined) {
+    delete map[String(tabId)];
+    await browser.storage.local.set({ [CRENEW_STORE_KEY]: map });
+  }
+  try { await browser.alarms.clear(crenewKey(tabId)); } catch (e) {}
+}
+
+export async function handleContainerRenewAlarm(alarmName) {
+  const tabId = parseContainerRenewTab(alarmName);
+  if (tabId === null) return;
+  const store = await browser.storage.local.get(CRENEW_STORE_KEY);
+  const data = (store[CRENEW_STORE_KEY] || {})[String(tabId)];
+  if (!data) return;
+
+  const tab = await browser.tabs.get(tabId).catch(() => null);
+  if (!tab) { await clearContainerRenew(tabId); return; }
+
+  // Refresh the base login into the container (don't clear — a still-valid
+  // session shouldn't be nuked if the copy comes up empty), then re-assume the
+  // role in an inactive background tab in the same container so the user's
+  // visible tab is left untouched.
+  await bootstrapContainerSession(tab.cookieStoreId, data.signinEndpoint, false);
+  renewInBackgroundTab(tab.cookieStoreId, data);
+
+  browser.alarms.create(crenewKey(tabId), { when: Date.now() + CRENEW_AT_MIN * 60 * 1000 });
+}
+
+// Re-assume the role in an inactive tab in the same container, then close it.
+// This refreshes the container's shared session cookies without navigating the
+// user's visible tab.
+function renewInBackgroundTab(cookieStoreId, data) {
+  return browser.tabs.create({ url: buildSwitchUrl(data), cookieStoreId, active: false })
+    .then((bgTab) => {
+      const bgId = bgTab.id;
+      let done = false;
+      let timer = null;
+      const finish = () => {
+        if (done) return;
+        done = true;
+        try { browser.tabs.onUpdated.removeListener(onUpd); } catch (e) {}
+        clearTimeout(timer);
+        browser.tabs.remove(bgId).catch(() => {});
+      };
+      const onUpd = (tid, changeInfo) => {
+        if (tid !== bgId) return;
+        const u = changeInfo.url || '';
+        // once it leaves the switchrole page for a console page, the re-assume
+        // is complete and the container's session cookies are refreshed
+        if (u && !/\/switchrole/i.test(u) && /console\.(aws|amazonaws)/i.test(u)) {
+          setTimeout(finish, 1200);
+        }
+      };
+      browser.tabs.onUpdated.addListener(onUpd);
+      timer = setTimeout(finish, 25000); // safety net: always close within 25s
+    })
+    .catch(() => {});
 }
 
 //

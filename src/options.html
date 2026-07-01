@@ -350,18 +350,19 @@ pre code { background: none; border: none; padding: 0; font-weight: 400; }
 <body>
 <header class="topbar">
   <svg class="brand-icon" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-    <rect x="3" y="19.5" width="26" height="5" rx="2.5" fill="var(--accent)"/>
-    <path d="M6.5 20.5a9.5 9.5 0 0 1 19 0Z" fill="var(--accent)"/>
-    <rect x="15.2" y="11" width="1.6" height="9" rx="0.8" fill="#fff" opacity="0.9"/>
-    <rect x="11" y="13.3" width="1.4" height="6.7" rx="0.7" fill="#fff" opacity="0.55"/>
-    <rect x="19.6" y="13.3" width="1.4" height="6.7" rx="0.7" fill="#fff" opacity="0.55"/>
+    <ellipse cx="16" cy="24.5" rx="15" ry="4" fill="var(--accent)"/>
+    <path d="M4 24.5a12 17 0 0 1 24 0Z" fill="var(--accent)"/>
+    <circle cx="16" cy="8" r="2.2" fill="var(--accent)"/>
+    <rect x="14.7" y="8.5" width="2.6" height="15.5" rx="1.3" fill="#fff" opacity="0.9"/>
+    <rect x="9.3" y="13" width="2.2" height="11" rx="1.1" fill="#fff" opacity="0.5"/>
+    <rect x="20.5" y="13" width="2.2" height="11" rx="1.1" fill="#fff" opacity="0.5"/>
   </svg>
   <div class="brand-text">
     <h1>RoleDeck<span class="pill">AWS role switcher</span></h1>
     <p class="tagline">Configuration &amp; settings</p>
   </div>
   <span class="spacer"></span>
-  <span class="ver">v0.1.0</span>
+  <span class="ver">v0.2.0</span>
 </header>
 
 <main class="layout">
@@ -737,7 +738,7 @@ confirm = true          ; force a confirm even though it isn't prod</pre>
 role_arn = arn:aws:iam::123456789012:role/ReadOnly
 env = production
 start_url = https://us-east-1.console.aws.amazon.com/cloudwatch/home?region=us-east-1</pre>
-    <p>In the popup: press <b>Alt</b>+<b>1–9</b> to jump straight to a role, ⭐ star favorites, and use <b>Open all</b> in the Favorites section to open each one in its own container tab. The <b>Activity log</b> and <b>Managed config</b> tools are in the panel on the left.</p>
+    <p>In the popup: type to filter and press <b>Enter</b> to switch, ⭐ star favorites, and use <b>Open all</b> in the Favorites section to open each one in its own container tab. The <b>Activity log</b> and <b>Managed config</b> tools are in the panel on the left.</p>
    </div>
 
    <div class="section">

@@ -154,14 +154,14 @@ async function loadFormList(curURL, userInfo, tabId) {
   ]);
   const {
     hidesAccountId = false, showOnlyMatchingRoles = false, autoTabGrouping = false,
-    signinEndpointInHere = false, autoSessionRenew = false,
+    signinEndpointInHere = false,
   } = data;
   // Default to container-per-account on Firefox so switching to a new account
   // never has to chain roles (and never forces you back to base).
   const useFirefoxContainers = data.useFirefoxContainers === undefined
     ? containersAvailable()
     : data.useFirefoxContainers;
-  autoSessionRenewEnabled = autoSessionRenew;
+  autoSessionRenewEnabled = data.autoSessionRenew !== false; // default on
   favoritesSet = new Set(data[FAV_KEY] || []);
   recentsList = data[RECENT_KEY] || [];
 
@@ -284,6 +284,7 @@ async function openWorkspace() {
       }
     }
     if (currentUserInfo) data.signinEndpoint = currentUserInfo.signinEndpoint;
+    data.autoRenew = autoSessionRenewEnabled;
     recordRecent(data.profile);
     recordSwitchMeta({ name: data.profile, aws_account_id: data.account, role_name: data.rolename }, data);
     await brw.runtime.sendMessage({ action: 'openInContainer', data }).catch(() => {});
@@ -367,19 +368,6 @@ function buildList(profiles) {
 
 function refreshVisibleRows() {
   visibleRows = Array.from(resultsEl.querySelectorAll('ul.roleList > li'));
-  // number the first nine rows for Alt+1–9 quick-switch
-  visibleRows.forEach((li, i) => {
-    const a = li.querySelector('a.rl-row');
-    if (!a) return;
-    const existing = a.querySelector('.rl-index');
-    if (existing) existing.remove();
-    if (i < 9) {
-      const idx = document.createElement('span');
-      idx.className = 'rl-index';
-      idx.textContent = String(i + 1);
-      a.insertBefore(idx, a.firstChild);
-    }
-  });
 }
 
 function setSelected(index) {
@@ -398,13 +386,6 @@ function setupSearch() {
   });
 
   filterEl.addEventListener('keydown', function(e) {
-    if (e.altKey && /^[1-9]$/.test(e.key)) {
-      e.preventDefault();
-      const li = visibleRows[Number(e.key) - 1];
-      const a = li && li.querySelector('a.rl-row');
-      if (a) a.click();
-      return;
-    }
     if (e.key === 'ArrowDown') {
       e.preventDefault();
       setSelected(Math.min(selectedIndex + 1, visibleRows.length - 1));
@@ -465,6 +446,7 @@ function showGuardrail(item, onConfirm) {
 }
 
 async function sendOpenInContainer(data) {
+  data.autoRenew = autoSessionRenewEnabled;
   const resp = await brw.runtime.sendMessage({ action: 'openInContainer', data });
   if (resp && resp.error) {
     showMessage(`Failed to open the profile in a container tab. ${resp.error}`, 'error');

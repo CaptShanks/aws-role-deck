@@ -2,7 +2,7 @@ import { SessionMemory, SyncStorageRepository } from './lib/storage_repository.j
 import { setIcon } from './lib/set_icon.js'
 import { externalConfigReceived } from './handlers/external.js'
 import { updateProfilesTable } from './handlers/update_profiles.js'
-import { openProfileInContainer, setupContainerTabGuard } from './lib/container_tabs.js'
+import { openProfileInContainer, setupContainerTabGuard, handleContainerRenewAlarm, clearContainerRenew } from './lib/container_tabs.js'
 import { trackSwitch, clearTracking, handleRenewAlarm } from './lib/session_renew.js'
 import { applyManagedConfig } from './lib/managed_config.js'
 
@@ -13,10 +13,12 @@ setupContainerTabGuard()
 
 chrome.alarms.onAlarm.addListener(alarm => {
   handleRenewAlarm(alarm.name).catch(err => console.error(err));
+  handleContainerRenewAlarm(alarm.name).catch(err => console.error(err));
 })
 
 chrome.tabs.onRemoved.addListener(tabId => {
   clearTracking(tabId).catch(() => {});
+  clearContainerRenew(tabId).catch(() => {});
 })
 
 async function initScript() {
